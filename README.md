@@ -38,7 +38,7 @@ A beautiful, themed window/task switcher in the style of the macOS app switcher,
 
 This clones the repo into `~/.config/omarchy/plugins/`, and enables it.
 
-2. Then copy the files from this repo to ~/.config/omarchy/plugins/ewweberlin.quickswitch
+2. Then copy the files from this repo to `~/.config/omarchy/plugins/ewweberlin.quickswitch`
 overwrite all
 
 3. Bindings (enables SUPER + TAB) — add this line to `~/.config/hypr/bindings.lua`:
