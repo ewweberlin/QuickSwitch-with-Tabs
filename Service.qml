@@ -20,13 +20,38 @@ Item {
     property bool modsHeld: false
     property string pendingAddr: ""
     property real lastRefreshTime: 0
+    property int pendingCount: 0
+    property var pendingTabs: []
+    property string chromiumPort: ""
 
     function next() { if (windows.length) selected = (selected + 1) % windows.length }
     function prev() { if (windows.length) selected = (selected + windows.length - 1) % windows.length }
 
     function openSwitcher() {
         console.log("[task-switch] openSwitcher called")
+        root.pendingCount = 2
+        root.pendingTabs = []
         clientsProc.running = true
+        detectProc.running = true
+    }
+
+    // Every fetch path (windows, tabs) reports via taskDone; when both are
+    // finished the merged list is rendered and the overlay opens.
+    function taskDone() {
+        root.pendingCount -= 1
+        if (root.pendingCount <= 0) finalize()
+    }
+
+    function finalize() {
+        const tabs = Logic.tabRecords(root.pendingTabs, root.windows)
+        const merged = root.windows.slice()
+        for (const t of tabs) merged.push(t)
+        console.log("[task-switch] finalize: entries=", merged.length, "tabs=", tabs.length)
+        root.pendingTabs = []
+        root.windows = merged
+        if (!merged.length) return
+        root.selected = 0
+        root.open = true
     }
 
     function close(doFocus) {
@@ -34,8 +59,25 @@ Item {
         const entry = (doFocus && windows.length) ? windows[selected] : null
         open = false
         if (!entry) return
+        if (entry.kind === "tab") {
+            root.activateTab(entry)
+            return
+        }
         pendingAddr = entry.address
         focusTimer.start()
+    }
+
+    // Activate an exact Chromium tab over CDP (raises + focuses the tab inside
+    // the browser), then raise the hosting window on the compositor.
+    function activateTab(entry) {
+        root.pendingAddr = entry.browserAddr || ""
+        if (entry.tabId && root.chromiumPort) {
+            tabActivateProc.command = ["curl", "-s", "-m", "2",
+                "http://127.0.0.1:" + root.chromiumPort + "/json/activate/" + encodeURIComponent(entry.tabId)]
+            tabActivateProc.running = true
+        } else if (root.pendingAddr) {
+            focusTimer.start()
+        }
     }
 
     Timer {
@@ -54,6 +96,16 @@ Item {
     // disappears; focus is only switched on SUPER release.
     function quitSelected() {
         const entry = windows.length ? windows[selected] : null
+        if (!entry) return
+        if (entry.kind === "tab") {
+            if (entry.tabId && root.chromiumPort) {
+                root.lastRefreshTime = Date.now()
+                tabQuitProc.command = ["curl", "-s", "-m", "2",
+                    "http://127.0.0.1:" + root.chromiumPort + "/json/close/" + encodeURIComponent(entry.tabId)]
+                tabQuitProc.running = true
+            }
+            return
+        }
         if (!entry || !entry.address) return
         const addr = entry.address
         console.log("[task-switch] quitSelected addr=", addr, "cls=", entry.cls)
@@ -71,6 +123,63 @@ Item {
             console.log("[task-switch] quitProc exited code=", exitCode)
             refreshAfterQuit.running = true
         }
+    }
+
+    // Discover the live Chromium DevTools port: the DevToolsActivePort file
+    // first (written when launched with --remote-debugging-port), else scan
+    // /proc command lines, else nothing (tabs are skipped gracefully).
+    Process {
+        id: detectProc
+        command: ["sh", "-c",
+            'u="$HOME/.config/chromium"; [ -r "$u/DevToolsActivePort" ] && head -n1 "$u/DevToolsActivePort" && exit 0; p=$(grep -aho -- "--remote-debugging-port=[0-9]*" /proc/[0-9]*/cmdline 2>/dev/null | head -n1 | cut -d= -f2); [ -n "$p" ] && echo "$p" && exit 0; echo ""']
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.chromiumPort = text.trim()
+                if (root.chromiumPort) {
+                    tabsProc.command = ["curl", "-s", "-m", "2",
+                        "http://127.0.0.1:" + root.chromiumPort + "/json/list"]
+                    tabsProc.running = true
+                } else {
+                    console.log("[task-switch] no chromium debug port detected — no tabs")
+                    root.taskDone()
+                }
+            }
+        }
+    }
+
+    // Chromium tab list from the DevTools Protocol HTTP endpoint (/json/list).
+    // Raw page targets are merged with the window list in finalize().
+    Process {
+        id: tabsProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let tabs = []
+                try { tabs = JSON.parse(text) } catch (e) { tabs = [] }
+                root.pendingTabs = tabs
+                root.taskDone()
+            }
+        }
+    }
+
+    // Focus a specific tab inside Chromium (GET /json/activate/<id>), then let
+    // focusTimer raise the hosting browser window.
+    Process {
+        id: tabActivateProc
+        stdout: StdioCollector { onStreamFinished: console.log("[task-switch] tab activate:", text.trim()) }
+        stderr: StdioCollector { onStreamFinished: console.log("[task-switch] tab activate stderr:", text.trim()) }
+        onExited: {
+            if (root.pendingAddr)
+                focusTimer.start()
+        }
+    }
+
+    // Close a specific tab (GET /json/close/<id>); the switcher stays open and
+    // the list refreshes so the closed tab disappears.
+    Process {
+        id: tabQuitProc
+        stdout: StdioCollector { onStreamFinished: console.log("[task-switch] tab close:", text.trim()) }
+        stderr: StdioCollector { onStreamFinished: console.log("[task-switch] tab close stderr:", text.trim()) }
+        onExited: refreshAfterQuit.running = true
     }
 
     // Keep the overlay mounted (open stays true) and refresh the list.
@@ -170,9 +279,13 @@ Item {
 
     function fillWindows(clients) {
         console.log("[task-switch] fillWindows called, n=", Array.isArray(clients) ? clients.length : "not-array")
-        if (!Array.isArray(clients)) return
+        if (!Array.isArray(clients)) {
+            root.windows = []
+            root.groups = []
+            root.taskDone()
+            return
+        }
         const ordered = Logic.orderClients(clients)
-        if (!ordered.length) return
 
         const byAddr = {}
         for (const tl of (Hyprland.toplevels.values || [])) {
@@ -211,7 +324,7 @@ Item {
         root.selected = 0
         root.sawKeyEvent = false
         root.modsHeld = false
-        root.open = true
+        root.taskDone()
     }
 
     function iconPathFor(cls, title) {
@@ -425,13 +538,31 @@ Item {
                                         color: Color.popups.background
 
                                         Image {
+                                            id: previewIcon
                                             anchors.centerIn: parent
                                             width: 64
                                             height: 64
                                             sourceSize.width: 64
                                             sourceSize.height: 64
                                             fillMode: Image.PreserveAspectFit
-                                            source: win ? root.iconPathFor(win.cls, win.title) : ""
+                                            // Browser tabs have no window snapshot: show
+                                            // the site favicon, falling back to the
+                                            // Chromium icon if the favicon is missing or
+                                            // fails to load.
+                                            property bool faviconFailed: false
+                                            source: {
+                                                if (!win) return ""
+                                                if (win.kind === "tab") {
+                                                    if (faviconFailed) return root.iconPathFor("chromium", win.title)
+                                                    return win.faviconUrl || root.iconPathFor("chromium", win.title)
+                                                }
+                                                return root.iconPathFor(win.cls, win.title)
+                                            }
+                                            onStatusChanged: {
+                                                if (win && win.kind === "tab" && status === Image.Error)
+                                                    faviconFailed = true
+                                            }
+                                            onSourceChanged: faviconFailed = false
                                         }
                                     }
 

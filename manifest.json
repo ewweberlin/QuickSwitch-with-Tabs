@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "author": "ewweberlin",
   "license": "MIT",
-  "description": "macOS-style task/window switcher with window previews. Hold SUPER, tap TAB to cycle, release SUPER to switch to the selected window's workspace. SUPER+Q quits the highlighted app.",
+  "description": "macOS-style task/window switcher with window previews. Hold SUPER, tap TAB to cycle, release SUPER to switch to the selected window's workspace. SUPER+Q quits the highlighted app. Also shows Chromium tabs (switches to the exact tab, SUPER+Q closes it) when Chromium runs with a remote debugging port.",
   "kinds": ["service"],
   "keepLoaded": true,
   "entryPoints": {"service": "Service.qml"},

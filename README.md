@@ -15,6 +15,9 @@ A beautiful, themed window/task switcher in the style of the macOS app switcher,
 - **SUPER+Q** quits the highlighted app.
 - **Release SUPER** to activate the selected window — which switches you to
   that window's **workspace**.
+- **Chromium tabs** appear as their own cards (site favicon + Chromium icon).
+  Selecting one activates the **exact tab** and raises the browser window;
+  **SUPER+Q** closes the tab while the switcher is open.
 - Every item is a **still window snapshot** (captured when the switcher opens)
   with the **app icon in the top-left corner**, arranged in a horizontal strip
   centered on the screen.
@@ -26,13 +29,15 @@ A beautiful, themed window/task switcher in the style of the macOS app switcher,
 - Hyprland ≥ 0.56 (Lua config) with the `hyprland-toplevel-export` /
   screencopy support for live previews
 - `hyprctl` on PATH
+- **Optional — Chromium tabs:** Chromium running with a
+  `--remote-debugging-port` flag (the plugin auto-detects the port; see below)
 
 ## Installation
 
 Install it from this repository with the official Omarchy tooling:
 
 ```sh
-omarchy plugin add https://github.com/ewweberlin/QuickSwitch.git --enable
+omarchy plugin add https://github.com/ewweberlin/QuickSwitch-with-Tabs.git --enable
 ```
 
 This clones the repo into `~/.config/omarchy/plugins/`, and enables it.
@@ -53,6 +58,13 @@ hyprctl globalshortcuts
 ```
 
 The `SUPER + TAB` shortcut should appear in `hyprctl globalshortcuts`.
+
+### Optional — enable Chromium tabs
+
+If you use Chromium and want its open tabs in the switcher, see the
+[Chromium tabs](#chromium-tabs) section: append `--remote-debugging-port=9222`
+to `~/.config/chromium-flags.conf` and fully restart Chromium. No setup at all
+is needed for the plain (windows-only) switcher.
 
 ### Removal
 
@@ -83,4 +95,35 @@ omarchy plugin update ewweberlin.quickswitch
   (Esc, or clicking empty space) closes without changing focus.
 - Colors come from the shell `Color` singleton, so the switcher follows the
   active Omarchy theme automatically.
+
+## Chromium tabs
+
+Chromium does not expose individual tabs through Hyprland, so the switcher reads
+them over the **Chrome DevTools Protocol (CDP)** HTTP endpoint. This needs
+Chromium to be launched with a remote debugging port:
+
+```text
+--remote-debugging-port=9222
+```
+
+On Omarchy/Arch, Chromium reads flags from `~/.config/chromium-flags.conf` — add
+the line there, then **fully quit and restart Chromium** (the flag is only read
+at launch). The plugin then auto-detects the live port (`DevToolsActivePort` up
+first, else a `/proc` scan, else `9222`), and:
+
+- lists every `page` target from `GET /json/list` (internal pages like
+  `chrome://` are skipped, as are DevTools/extension targets),
+- renders each tab as a card with its **site favicon** + the Chromium icon,
+- activates the **exact tab** (`GET /json/activate/<id>`) and raises the hosting
+  window when you switch to it,
+- closes the tab (`GET /json/close/<id>`) for **SUPER+Q**.
+
+No Chromium, or no debug port → the switcher behaves exactly as before (windows
+only). Tabs are appended after windows in cycle order.
+
+> **Security note:** a `--remote-debugging-port` exposes an unauthenticated
+> control channel on localhost — it can read and steer the browser. It is not
+> reachable from the network, but any local process could talk to it. Only
+> enable it if you accept that (a local tab switcher that can't reach the port
+> is the usual trade-off).
 
