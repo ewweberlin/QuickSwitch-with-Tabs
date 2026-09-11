@@ -34,21 +34,20 @@ A beautiful, themed window/task switcher in the style of the macOS app switcher,
 
 ## Installation
 
-Install it from this repository with the official Omarchy tooling:
-
-```sh
-omarchy plugin add https://github.com/ewweberlin/QuickSwitch-with-Tabs.git --enable
-```
+1. Install the official plugin first: https://github.com/ewweberlin/QuickSwitch
 
 This clones the repo into `~/.config/omarchy/plugins/`, and enables it.
 
-Bindings (enables SUPER + TAB) — add this line to `~/.config/hypr/bindings.lua`:
+2. Then copy the files from this repo to ~/.config/omarchy/plugins/ewweberlin.quickswitch
+overwrite all
+
+3. Bindings (enables SUPER + TAB) — add this line to `~/.config/hypr/bindings.lua`:
 
 ```lua
 dofile(os.getenv("HOME") .. "/.config/omarchy/plugins/ewweberlin.quickswitch/task-switch-bindings.lua")
 ```
 
-Restart the shell, reload Hyprland and Bindings:
+4. Restart the shell, reload Hyprland and Bindings:
 
 ```sh
 omarchy restart shell
@@ -59,7 +58,7 @@ hyprctl globalshortcuts
 
 The `SUPER + TAB` shortcut should appear in `hyprctl globalshortcuts`.
 
-### Optional — enable Chromium tabs
+### 5. Optional — enable Chromium tabs
 
 If you use Chromium and want its open tabs in the switcher, see the
 [Chromium tabs](#chromium-tabs) section: append `--remote-debugging-port=9222`
