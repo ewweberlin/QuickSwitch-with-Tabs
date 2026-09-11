@@ -65,22 +65,6 @@ If you use Chromium and want its open tabs in the switcher, see the
 to `~/.config/chromium-flags.conf` and fully restart Chromium. No setup at all
 is needed for the plain (windows-only) switcher.
 
-### Removal
-
-```sh
-omarchy plugin remove ewweberlin.quickswitch     # or: provide id interactively
-omarchy plugin disable ewweberlin.quickswitch    # disable without deleting
-```
-
-`plugin remove` unloads and disables the plugin, then handles each install
-flavor: it **unlinks** a symlinked checkout (source stays in place), **deletes**
-a cloned install, or **backs up** a plain folder. `plugin add` installs from
-git can be updated later with:
-
-```sh
-omarchy plugin update ewweberlin.quickswitch
-```
-
 
 ## Behavior details
 
